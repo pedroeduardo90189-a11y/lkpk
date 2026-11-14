@@ -1,1 +1,82 @@
-
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TecladoBR — Logs</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:monospace;background:#1a1a1a;color:#e0e0e0;padding:20px}
+h1{font-size:18px;color:#aaa;margin-bottom:16px;font-weight:normal}
+#auth{display:flex;gap:8px;margin-bottom:20px}
+#token{flex:1;background:#2a2a2a;border:1px solid #444;color:#e0e0e0;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:14px}
+button{background:#5c3d99;border:none;color:#fff;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:14px}
+button:hover{background:#7a52c4}
+#devices{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.dev{background:#2a2a2a;border:1px solid #444;padding:6px 12px;border-radius:20px;cursor:pointer;font-size:13px;color:#aaa}
+.dev.active{border-color:#7a52c4;color:#c4a0ff}
+#log-box{background:#111;border:1px solid #333;border-radius:8px;padding:16px;white-space:pre-wrap;font-size:13px;line-height:1.6;min-height:300px;max-height:70vh;overflow-y:auto;color:#c8f0c8}
+#status{font-size:12px;color:#666;margin-bottom:8px}
+.err{color:#f08080}
+</style>
+</head>
+<body>
+<h1>TecladoBR — visualizador de logs</h1>
+<div id="auth">
+  <input id="token" type="password" placeholder="token (ex: chave123)" />
+  <button onclick="loadDevices()">Conectar</button>
+</div>
+<div id="devices"></div>
+<div id="status"></div>
+<div id="log-box">aguardando conexão...</div>
+<script>
+const BASE = "https://lkpk-production.up.railway.app";
+async function loadDevices() {
+  const token = document.getElementById("token").value.trim();
+  if (!token) return;
+  document.getElementById("status").textContent = "carregando dispositivos...";
+  try {
+    const r = await fetch(BASE + "/logs", { headers: { "Authorization": token } });
+    if (!r.ok) { showErr("token inválido ou servidor offline"); return; }
+    const text = await r.text();
+    const lines = text.trim().split("\n").filter(l => l.trim());
+    const container = document.getElementById("devices");
+    container.innerHTML = "";
+    if (!lines.length) {
+      document.getElementById("status").textContent = "nenhum log ainda";
+      document.getElementById("log-box").textContent = "nenhum dispositivo conectado ainda.";
+      return;
+    }
+    lines.forEach(line => {
+      const filename = line.split(" —")[0].trim();
+      const btn = document.createElement("div");
+      btn.className = "dev";
+      btn.textContent = filename.replace(/_/g, ".").replace(".txt","");
+      btn.onclick = () => loadLog(filename, token, btn);
+      container.appendChild(btn);
+    });
+    document.getElementById("status").textContent = lines.length + " dispositivo(s) encontrado(s)";
+  } catch(e) { showErr("erro de conexão: " + e.message); }
+}
+async function loadLog(filename, token, btn) {
+  document.querySelectorAll(".dev").forEach(d => d.classList.remove("active"));
+  btn.classList.add("active");
+  try {
+    const r = await fetch(BASE + "/logs/" + filename, { headers: { "Authorization": token } });
+    if (!r.ok) { showErr("erro ao carregar log"); return; }
+    const text = await r.text();
+    const box = document.getElementById("log-box");
+    box.textContent = text || "(vazio)";
+    box.scrollTop = box.scrollHeight;
+    document.getElementById("status").textContent = "atualizado: " + new Date().toLocaleTimeString();
+    clearInterval(window._interval);
+    window._interval = setInterval(() => loadLog(filename, token, btn), 30000);
+  } catch(e) { showErr("erro: " + e.message); }
+}
+function showErr(msg) {
+  document.getElementById("log-box").innerHTML = '<span class="err">' + msg + '</span>';
+}
+document.getElementById("token").addEventListener("keydown", e => { if (e.key === "Enter") loadDevices(); });
+</script>
+</body>
+</html>
